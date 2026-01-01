@@ -46,9 +46,23 @@ jobs:
           PR_NUMBER="${{ github.event.pull_request.number }}"
 
           if [ "$TAG_EXISTS" = "true" ]; then
-            MESSAGE="## Version Tag Check ❌\n\nThe version \`$VERSION\` already exists as a git tag.\n\nPlease update the version file with a new version number before merging."
+            MESSAGE=$(cat <<EOF
+          ## Version Tag Check ❌
+
+          The version \`$VERSION\` already exists as a git tag.
+
+          Please update the version file with a new version number before merging.
+          EOF
+          )
           else
-            MESSAGE="## Version Tag Check ✅\n\nThe version \`$VERSION\` does not exist as a git tag.\n\nThis version is available for use."
+            MESSAGE=$(cat <<EOF
+          ## Version Tag Check ✅
+
+          The version \`$VERSION\` does not exist as a git tag.
+
+          This version is available for use.
+          EOF
+          )
           fi
 
           gh pr comment "$PR_NUMBER" --body "$MESSAGE"
