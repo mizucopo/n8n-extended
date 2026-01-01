@@ -11,14 +11,13 @@ n8nにDocker CLIを追加した拡張版Dockerイメージ
 ## 使い方
 
 ```bash
-docker pull [USERNAME]/n8n-extended:latest
+docker pull mizucopo/n8n-extended:latest
 ```
 
 ## GitHub Actionsの設定
 
-このプロジェクトではGitHub Actionsを使用してDockerイメージを自動ビルドしています。以下のSecretsを設定してください。
+このプロジェクトではGitHub Actionsを使用してDockerイメージを自動ビルドしています。以下のSecretを設定してください。
 
-- `DOCKERHUB_USERNAME`: Docker Hubのユーザー名
 - `DOCKERHUB_TOKEN`: Docker Hubのアクセストークン
 
 ## ライセンス
