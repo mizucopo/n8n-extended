@@ -10,6 +10,14 @@ n8nにDocker CLIを追加した拡張版Dockerイメージ
 
 ## 使い方
 
+### ローカルでビルドする場合
+
+```bash
+docker build -t mizucopo/n8n-extended:develop .
+```
+
+### Docker Hubからプルする場合
+
 ```bash
 docker pull mizucopo/n8n-extended:latest
 ```
