@@ -7,8 +7,5 @@ RUN apk add --no-cache curl && \
     rm docker.tgz
 
 FROM n8nio/n8n:${N8N_VERSION}
-USER root
 COPY --from=docker-cli docker/docker /usr/local/bin/docker
 RUN chmod +x /usr/local/bin/docker
-
-USER node

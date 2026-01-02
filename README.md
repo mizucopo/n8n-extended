@@ -4,7 +4,7 @@ n8nにDocker CLIを追加した拡張版Dockerイメージ
 
 ## 特徴
 
-- n8n公式イメージ（n8nio/n8n:2.2.1）をベース
+- n8n公式イメージ（n8nio/n8n）をベース
 - Docker CLIが組み込まれている
 - ワークフローからDockerコマンドを実行可能
 
