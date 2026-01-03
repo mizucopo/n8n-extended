@@ -1,0 +1,15 @@
+_commit: 9df4c28
+_src_path: git@github.com:mizucopo/repo-template.git
+author_email: mizu.copo@gmail.com
+author_name: mizu
+docker_image_name: n8n-extended
+docker_registry: mizucopo
+project_dependencies: []
+project_description: n8nにDocker CLIを追加した拡張版Dockerイメージ
+project_name: n8n-extended
+project_version: 2.2.2
+use_aws_ecr: false
+use_gh_actions_docker_release: true
+use_gh_actions_pr_tag_check: true
+use_mit_license: true
+use_python: false

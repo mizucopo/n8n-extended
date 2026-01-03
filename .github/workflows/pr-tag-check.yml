@@ -1,4 +1,4 @@
-name: Check Version Tag
+name: PR Tag Conflict Check
 
 on:
   pull_request:
@@ -10,66 +10,46 @@ permissions:
   pull-requests: write
 
 jobs:
-  check-version-tag:
+  check-tag-conflict:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Read version
-        id: info
+        id: version
         run: |
-          VERSION=$(cat version)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Detected version: $VERSION"
+          echo "version=$(cat version)" >> $GITHUB_OUTPUT
 
       - name: Check if tag exists
-        id: check_tag
+        id: tag
         run: |
-          VERSION="${{ steps.info.outputs.version }}"
           git fetch --tags
-          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+          if git rev-parse "${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Comment on PR
-        if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ steps.info.outputs.version }}"
-          TAG_EXISTS="${{ steps.check_tag.outputs.exists }}"
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-
-          if [ "$TAG_EXISTS" = "true" ]; then
-            MESSAGE=$(cat <<EOF
-          ## Version Tag Check ❌
-
-          The version \`$VERSION\` already exists as a git tag.
-
-          Please update the version file with a new version number before merging.
-          EOF
-          )
+          if [ "${{ steps.tag.outputs.exists }}" = "true" ]; then
+            MESSAGE="$(printf '%s\n' \
+              "## Version Tag Check ❌" \
+              "" \
+              "The version \`${{ steps.version.outputs.version }}\` already exists as a git tag." \
+              "" \
+              "Please update the version with a new version number before merging.")"
+            gh pr comment "${{ github.event.pull_request.number }}" --body "$MESSAGE"
+            exit 1
           else
-            MESSAGE=$(cat <<EOF
-          ## Version Tag Check ✅
-
-          The version \`$VERSION\` does not exist as a git tag.
-
-          This version is available for use.
-          EOF
-          )
+            MESSAGE="$(printf '%s\n' \
+              "## Version Tag Check ✅" \
+              "" \
+              "The version \`${{ steps.version.outputs.version }}\` does not exist as a git tag." \
+              "" \
+              "This version is available for use.")"
+            gh pr comment "${{ github.event.pull_request.number }}" --body "$MESSAGE"
           fi
-
-          gh pr comment "$PR_NUMBER" --body "$MESSAGE"
-
-      - name: Fail if tag exists
-        if: steps.check_tag.outputs.exists == 'true'
-        run: |
-          VERSION="${{ steps.info.outputs.version }}"
-          echo "::error::Version tag $VERSION already exists. Please update the version file."
-          exit 1
