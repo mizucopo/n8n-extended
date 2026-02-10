@@ -53,6 +53,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            N8N_VERSION=${{ steps.version.outputs.version }}
           tags: |
             mizucopo/n8n-extended:latest
             mizucopo/n8n-extended:${{ steps.version.outputs.version }}
