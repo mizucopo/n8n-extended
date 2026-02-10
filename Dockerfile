@@ -1,4 +1,4 @@
-ARG N8N_VERSION=2.2.1
+ARG N8N_VERSION
 
 FROM alpine:3.19 AS docker-cli
 RUN apk add --no-cache curl && \
