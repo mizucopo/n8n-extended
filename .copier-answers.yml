@@ -1,9 +1,10 @@
-_commit: 97150bc
+_commit: cf13574
 _src_path: git@github.com:mizucopo/repo-template.git
 author_name: mizu
 docker_image_name: n8n-extended
 docker_registry: mizucopo
 use_aws_ecr: false
+use_docker: true
 use_gh_actions_docker_release: true
 use_gh_actions_pr_tag_check: true
 use_mit_license: true
