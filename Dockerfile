@@ -1,6 +1,6 @@
 ARG N8N_VERSION
 
-FROM alpine:3.19 AS docker-cli
+FROM alpine:3.23 AS docker-cli
 RUN apk add --no-cache curl && \
     curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz -o docker.tgz && \
     tar xzvf docker.tgz && \
