@@ -13,7 +13,7 @@ n8nにDocker CLIを追加した拡張版Dockerイメージ
 ### ローカルでビルドする場合
 
 ```bash
-docker build -t mizucopo/n8n-extended:develop .
+docker build --build-arg N8N_VERSION=$(cat version) --platform linux/amd64 -t mizucopo/n8n-extended:develop .
 ```
 
 ### Docker Hubからプルする場合
