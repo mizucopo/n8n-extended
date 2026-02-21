@@ -19,7 +19,7 @@ docker build --build-arg N8N_VERSION=$(cat version) --platform linux/amd64 -t mi
 ### Docker Hubからプルする場合
 
 ```bash
-docker pull mizucopo/n8n-extended:latest
+docker pull --platform linux/amd64 mizucopo/n8n-extended:latest
 ```
 
 ## バージョンアップ手順
