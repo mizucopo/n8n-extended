@@ -19,11 +19,11 @@ ARG ALPINE_VERSION
 # Copy Docker CLI
 COPY --from=tools docker/docker /usr/local/bin/docker
 
-# Copy static apk and install Python
+# Copy static apk and install Python and ffmpeg
 COPY --from=tools /sbin/apk.static /sbin/apk
 RUN chmod +x /usr/local/bin/docker && \
     chmod +x /sbin/apk && \
     echo "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION}/main" > /etc/apk/repositories && \
     echo "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION}/community" >> /etc/apk/repositories && \
-    /sbin/apk add --no-cache python3 py3-pip && \
+    /sbin/apk add --no-cache python3 py3-pip ffmpeg && \
     rm -rf /var/cache/apk/*
