@@ -50,4 +50,4 @@ git push
 
 ## ライセンス
 
-MIT
+[MIT](LICENSE)
