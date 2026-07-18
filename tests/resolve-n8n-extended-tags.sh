@@ -4,7 +4,7 @@ set -eu
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 script_path="$repo_root/scripts/resolve-n8n-extended-tags.sh"
 image_repository="mizucopo/n8n-extended"
-version_tag="2.25.2"
+version_tag="2.31.3"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
@@ -61,7 +61,7 @@ if ! grep -Fqx "revision must be empty or match r[0-9]+." "$tmp_dir/error"; then
   exit 1
 fi
 
-printf '%s\n%s\n' "$version_tag" "2.25.3" > "$tmp_dir/version"
+printf '%s\n%s\n' "$version_tag" "2.31.4" > "$tmp_dir/version"
 : > "$tmp_dir/revision"
 if (
   cd "$tmp_dir"
