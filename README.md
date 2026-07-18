@@ -9,7 +9,7 @@
 - n8n 公式イメージをベースに使用
 - Docker CLI を同梱
 - ffmpeg を同梱
-- バージョン付きタグと `latest` タグを Docker Hub で公開
+- n8n バージョンと任意の revision で識別する不変タグ、および `latest` タグを Docker Hub で公開
 
 このイメージに Docker デーモンは含まれていません。Docker コマンドを実行するには、ホストの Docker ソケットをマウントするか、別の Docker デーモンへの接続を設定してください。
 
@@ -43,16 +43,19 @@ n8n 2.0 以降で Python の Code ノードを使用する場合は、External T
 `.env` に使用するバージョンと共有トークンを設定します。
 
 ```dotenv
-N8N_VERSION=2.25.1
+N8N_VERSION=2.25.2
+N8N_EXTENDED_IMAGE_TAG=2.25.2-r1
 N8N_RUNNERS_AUTH_TOKEN=replace-with-a-random-secret
 ```
+
+`N8N_EXTENDED_IMAGE_TAG` には利用する拡張イメージのタグを指定します。`N8N_VERSION` は公式 n8n と Task Runner のバージョンなので revision を付けません。
 
 同じディレクトリに `compose.yml` を作成します。
 
 ```yaml
 services:
   n8n:
-    image: mizucopo/n8n-extended:${N8N_VERSION}
+    image: mizucopo/n8n-extended:${N8N_EXTENDED_IMAGE_TAG}
     platform: linux/amd64
     ports:
       - "5678:5678"
@@ -107,13 +110,33 @@ docker build \
 
 ## リリース
 
-`version` ファイルを未使用の n8n バージョンへ更新し、変更を `main` ブランチへマージすると、GitHub Actions が次の処理を行います。
+通常のリリースでは、`version` に使用する n8n バージョンを書き、`revision` は空にします。
 
-1. Docker イメージのビルド
-2. `mizucopo/n8n-extended:<version>` と `mizucopo/n8n-extended:latest` の公開
-3. Git タグと GitHub Release の作成
+```bash
+printf "2.25.2\n" > version
+: > revision
+```
+
+同じ n8n バージョンに対して拡張イメージだけを修正して再公開する場合は、`revision` に `r1`、`r2` のような Extended Image Revision を書きます。
+
+```bash
+printf "r1\n" > revision
+```
+
+この場合、公式イメージ `n8nio/n8n:2.25.2` を親にして、Docker イメージ、Git タグ、GitHub Release には `2.25.2-r1` を使用します。
+
+`main` ブランチで `version`、`revision`、`Dockerfile`、タグ解決スクリプト、またはリリースワークフローが更新されると、GitHub Actions が次の処理を行います。
+
+1. Git タグと不変 Docker タグが未使用であることを確認
+2. Docker イメージをビルド
+3. `mizucopo/n8n-extended:<version>[-<revision>]` と `mizucopo/n8n-extended:latest` を公開
+4. 同じ `<version>[-<revision>]` で Git タグと GitHub Release を作成
+
+Pull Request では、リリース対象ファイルが変更された場合だけ Git タグと Docker Hub タグの重複を検査します。既存の不変タグは上書きしません。
 
 リポジトリの GitHub Actions Secret には、Docker Hub のアクセストークンを `DOCKERHUB_TOKEN` として登録してください。
+
+設計判断の詳細は [Extended Image tags](docs/adr/0001-extended-image-tags.md) と [Extended Image release automation](docs/adr/0002-extended-image-release-automation.md) を参照してください。
 
 ## ライセンス
 

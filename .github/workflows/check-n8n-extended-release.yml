@@ -1,0 +1,122 @@
+name: Check n8n Extended Image Release
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_REPOSITORY: mizucopo/n8n-extended
+  REVISION_HINT: Update revision to the next Extended Image Revision, such as r1 or r2.
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect release-triggering changes
+        id: release_changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          release_inputs=(
+            version
+            revision
+            Dockerfile
+            scripts/resolve-n8n-extended-tags.sh
+            .github/workflows/release-n8n-extended.yml
+          )
+
+          if git diff --quiet "${BASE_SHA}...${HEAD_SHA}" -- "${release_inputs[@]}"; then
+            release_changes=false
+          else
+            diff_status=$?
+
+            if [ "${diff_status}" -ne 1 ]; then
+              exit "${diff_status}"
+            fi
+
+            release_changes=true
+          fi
+
+          echo "release_changes=${release_changes}" >> "${GITHUB_OUTPUT}"
+
+      - name: Report no release changes
+        if: steps.release_changes.outputs.release_changes != 'true'
+        run: echo "No release-triggering files changed; skipping duplicate tag checks."
+
+      - name: Resolve release tags
+        if: steps.release_changes.outputs.release_changes == 'true'
+        id: tags
+        run: scripts/resolve-n8n-extended-tags.sh
+
+      - name: Check git tag
+        if: steps.release_changes.outputs.release_changes == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.tags.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          git fetch --force --tags
+
+          if git rev-parse --verify --quiet "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            echo "Extended Image Release Tag already exists: ${RELEASE_TAG}" >&2
+            echo "${REVISION_HINT}" >&2
+            exit 1
+          fi
+
+      - name: Check Docker Hub tag
+        if: steps.release_changes.outputs.release_changes == 'true'
+        env:
+          IMAGE: ${{ steps.tags.outputs.image }}
+        run: |
+          set -euo pipefail
+
+          repository_path="${IMAGE%:*}"
+          namespace="${repository_path%%/*}"
+          repository="${repository_path#*/}"
+          tag="${IMAGE##*:}"
+          tag_url="https://hub.docker.com/v2/namespaces/${namespace}/repositories/${repository}/tags/${tag}"
+          http_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "${tag_url}")"
+
+          case "${http_status}" in
+            200)
+              echo "Extended Image Tag already exists on Docker Hub: ${IMAGE}" >&2
+              echo "${REVISION_HINT}" >&2
+              exit 1
+              ;;
+            404)
+              echo "Extended Image Tag is available on Docker Hub: ${IMAGE}"
+              ;;
+            *)
+              echo "Could not inspect Docker Hub tag: ${IMAGE} (HTTP ${http_status})" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Report release tags
+        if: steps.release_changes.outputs.release_changes == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.tags.outputs.release_tag }}
+          IMAGE: ${{ steps.tags.outputs.image }}
+        run: |
+          set -euo pipefail
+
+          echo "Extended Image Release Tag is available: ${RELEASE_TAG}"
+          echo "Extended Image Tag is available: ${IMAGE}"
