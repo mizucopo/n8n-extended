@@ -23,11 +23,24 @@ env:
   DOCKERHUB_URL: https://hub.docker.com/r/mizucopo/n8n-extended
 
 jobs:
-  release:
+  resolve-tags:
     runs-on: ubuntu-latest
     outputs:
-      image: ${{ steps.tags.outputs.image }}
-      release_tag: ${{ steps.tags.outputs.release_tag }}
+      image_tag: ${{ steps.tags.outputs.image_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve release tags
+        id: tags
+        run: scripts/resolve-n8n-extended-tags.sh
+
+  release:
+    needs: resolve-tags
+    concurrency:
+      group: n8n-release-${{ needs.resolve-tags.outputs.image_tag }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
     steps:
       - name: Require main
         run: |
@@ -194,6 +207,12 @@ jobs:
             --title "Release ${RELEASE_TAG}" \
             --notes-file release-notes.md
 
+      - name: Record latest release
+        env:
+          IMAGE_TAG: ${{ steps.tags.outputs.image_tag }}
+          RELEASE_TAG: ${{ steps.tags.outputs.release_tag }}
+        run: bash .github/scripts/authorize-docker-latest.sh record
+
   promote-latest:
     needs: release
     concurrency:
@@ -206,20 +225,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Authorize latest publication
+      - name: Read latest release
         id: latest-state
-        run: bash .github/scripts/authorize-docker-latest.sh check
-
-      - name: Record latest claim
-        if: steps.latest-state.outputs.publish_latest == 'true'
-        run: bash .github/scripts/authorize-docker-latest.sh record
+        run: bash .github/scripts/authorize-docker-latest.sh read
 
       - name: Set up Docker Buildx
-        if: steps.latest-state.outputs.publish_latest == 'true'
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Login to Docker Hub
-        if: steps.latest-state.outputs.publish_latest == 'true'
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
@@ -228,18 +241,16 @@ jobs:
             | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
 
       - name: Publish latest tag
-        if: steps.latest-state.outputs.publish_latest == 'true'
         env:
-          IMAGE: ${{ needs.release.outputs.image }}
+          IMAGE_TAG: ${{ steps.latest-state.outputs.image_tag }}
         run: |
           docker buildx imagetools create \
             --prefer-index=false \
             --tag "${IMAGE_REPOSITORY}:latest" \
-            "${IMAGE}"
+            "${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 
       - name: Mark GitHub Release as latest
-        if: steps.latest-state.outputs.publish_latest == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.release.outputs.release_tag }}
+          RELEASE_TAG: ${{ steps.latest-state.outputs.release_tag }}
         run: gh release edit "${RELEASE_TAG}" --latest
