@@ -83,3 +83,14 @@ if ! grep -Fqx "version must contain exactly one line." "$tmp_dir/error"; then
   cat "$tmp_dir/error" >&2
   exit 1
 fi
+
+if run_case "latest" "" 2> "$tmp_dir/error"; then
+  echo "Expected reserved latest version to fail." >&2
+  exit 1
+fi
+
+if ! grep -Fqx "version must not use the reserved Docker tag latest." "$tmp_dir/error"; then
+  echo "Expected reserved latest version error was not found." >&2
+  cat "$tmp_dir/error" >&2
+  exit 1
+fi
