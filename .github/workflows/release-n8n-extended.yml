@@ -165,6 +165,7 @@ jobs:
         if: steps.existing.outputs.tag_exists == 'true' && steps.existing.outputs.release_exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          PUBLISH_LATEST: ${{ steps.release-queue.outputs.publish_latest }}
           RELEASE_TAG: ${{ steps.tags.outputs.release_tag }}
           IMAGE: ${{ steps.tags.outputs.image }}
         run: |
@@ -183,7 +184,13 @@ jobs:
             echo "Docker Hub: ${DOCKERHUB_URL}"
           } > release-notes.md
 
+          latest_option="--latest=false"
+          if [ "${PUBLISH_LATEST}" = "true" ]; then
+            latest_option="--latest"
+          fi
+
           gh release create "${RELEASE_TAG}" \
+            "${latest_option}" \
             --verify-tag \
             --title "Release ${RELEASE_TAG}" \
             --notes-file release-notes.md
@@ -253,6 +260,7 @@ jobs:
         if: steps.existing.outputs.tag_exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          PUBLISH_LATEST: ${{ steps.release-queue.outputs.publish_latest }}
           RELEASE_TAG: ${{ steps.tags.outputs.release_tag }}
           IMAGE: ${{ steps.tags.outputs.image }}
         run: |
@@ -269,7 +277,13 @@ jobs:
             echo "Docker Hub: ${DOCKERHUB_URL}"
           } > release-notes.md
 
+          latest_option="--latest=false"
+          if [ "${PUBLISH_LATEST}" = "true" ]; then
+            latest_option="--latest"
+          fi
+
           gh release create "${RELEASE_TAG}" \
+            "${latest_option}" \
             --verify-tag \
             --title "Release ${RELEASE_TAG}" \
             --notes-file release-notes.md
