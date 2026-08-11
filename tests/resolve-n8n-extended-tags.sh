@@ -4,9 +4,14 @@ set -eu
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 script_path="$repo_root/scripts/resolve-n8n-extended-tags.sh"
 image_repository="mizucopo/n8n-extended"
-version_tag="2.30.7"
+version_tag="$(cat "$repo_root/version")"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
+
+if ! grep -Fqx "ARG N8N_VERSION=$version_tag" "$repo_root/Dockerfile"; then
+  echo "Dockerfile N8N_VERSION must match version." >&2
+  exit 1
+fi
 
 run_case() {
   version_value="$1"
@@ -75,6 +80,17 @@ fi
 
 if ! grep -Fqx "version must contain exactly one line." "$tmp_dir/error"; then
   echo "Expected multi-line version error was not found." >&2
+  cat "$tmp_dir/error" >&2
+  exit 1
+fi
+
+if run_case "latest" "" 2> "$tmp_dir/error"; then
+  echo "Expected reserved latest version to fail." >&2
+  exit 1
+fi
+
+if ! grep -Fqx "version must not use the reserved Docker tag latest." "$tmp_dir/error"; then
+  echo "Expected reserved latest version error was not found." >&2
   cat "$tmp_dir/error" >&2
   exit 1
 fi

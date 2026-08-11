@@ -34,6 +34,11 @@ if [[ ! "${n8n_version}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
   exit 1
 fi
 
+if [ "${n8n_version}" = "latest" ]; then
+  echo "version must not use the reserved Docker tag latest." >&2
+  exit 1
+fi
+
 if [ -n "${revision}" ] && [[ ! "${revision}" =~ ^r[0-9]+$ ]]; then
   echo "revision must be empty or match r[0-9]+." >&2
   exit 1

@@ -9,15 +9,13 @@ on:
       - revision
       - Dockerfile
       - scripts/resolve-n8n-extended-tags.sh
+      - .github/scripts/*.sh
       - .github/workflows/release-n8n-extended.yml
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: write
-
-concurrency:
-  group: release-n8n-extended-main
-  cancel-in-progress: false
 
 env:
   IMAGE_REPOSITORY: mizucopo/n8n-extended
@@ -25,9 +23,33 @@ env:
   DOCKERHUB_URL: https://hub.docker.com/r/mizucopo/n8n-extended
 
 jobs:
-  release:
+  resolve-tags:
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tags.outputs.image_tag }}
+      concurrency_key: ${{ steps.concurrency-key.outputs.key }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Resolve release tags
+        id: tags
+        run: scripts/resolve-n8n-extended-tags.sh
+
+      - name: Derive concurrency key
+        id: concurrency-key
+        env:
+          IMAGE_TAG: ${{ steps.tags.outputs.image_tag }}
+        run: |
+          key="$(printf '%s' "$IMAGE_TAG" | sha256sum | cut -d ' ' -f 1)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: resolve-tags
+    concurrency:
+      group: n8n-release-${{ needs.resolve-tags.outputs.concurrency_key }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
     steps:
       - name: Require main
         run: |
@@ -39,7 +61,7 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -89,7 +111,6 @@ jobs:
         run: echo "Release ${{ steps.tags.outputs.release_tag }} already exists for this commit."
 
       - name: Login to Docker Hub
-        if: steps.existing.outputs.tag_exists != 'true' || steps.existing.outputs.release_exists != 'true'
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
@@ -103,8 +124,73 @@ jobs:
           printf '%s' "${DOCKERHUB_TOKEN}" \
             | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
 
-      - name: Create missing release for existing tag
-        if: steps.existing.outputs.tag_exists == 'true' && steps.existing.outputs.release_exists != 'true'
+      - name: Check Docker Hub tag
+        id: image-state
+        if: steps.existing.outputs.tag_exists != 'true'
+        env:
+          IMAGE: ${{ steps.tags.outputs.image }}
+          TAG: ${{ steps.tags.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+
+          inspect_output="$(docker manifest inspect "${IMAGE}" 2>&1)" && inspect_status=0 || inspect_status=$?
+
+          if [ "${inspect_status}" -eq 0 ]; then
+            bash .github/scripts/manage-docker-image-owner.sh verify "$TAG"
+            echo "image_exists=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if printf '%s' "${inspect_output}" | grep -Eq 'no such manifest|manifest unknown'; then
+            echo "Docker image tag is available: ${IMAGE}"
+            echo "image_exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Could not inspect Docker Hub tag: ${IMAGE}" >&2
+            printf '%s\n' "${inspect_output}" >&2
+            exit "${inspect_status}"
+          fi
+
+      - name: Record Docker image ownership
+        if: steps.existing.outputs.tag_exists != 'true' && steps.image-state.outputs.image_exists != 'true'
+        env:
+          TAG: ${{ steps.tags.outputs.image_tag }}
+        run: bash .github/scripts/manage-docker-image-owner.sh record "$TAG"
+
+      - name: Build and push Extended Image
+        if: steps.existing.outputs.tag_exists != 'true' && steps.image-state.outputs.image_exists != 'true'
+        env:
+          IMAGE: ${{ steps.tags.outputs.image }}
+          N8N_VERSION: ${{ steps.tags.outputs.n8n_version }}
+        run: |
+          set -euo pipefail
+
+          docker build \
+            --build-arg N8N_VERSION="${N8N_VERSION}" \
+            --platform linux/amd64 \
+            -t "${IMAGE}" \
+            .
+
+          docker push "${IMAGE}"
+
+      - name: Create annotated git tag
+        if: steps.existing.outputs.tag_exists != 'true'
+        env:
+          RELEASE_TAG: ${{ steps.tags.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${RELEASE_TAG}" -m "Extended Image Release ${RELEASE_TAG}" "${GITHUB_SHA}"
+          git push origin "refs/tags/${RELEASE_TAG}"
+
+      - name: Release Docker image ownership
+        env:
+          TAG: ${{ steps.tags.outputs.image_tag }}
+        run: bash .github/scripts/manage-docker-image-owner.sh release "$TAG"
+
+      - name: Create GitHub Release
+        if: steps.existing.outputs.release_exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.tags.outputs.release_tag }}
@@ -120,89 +206,60 @@ jobs:
             echo "この GitHub Release に対応する Extended Image です。"
             echo
             echo "- Extended Image: \`${IMAGE}\`"
-            echo "- Latest Image: \`${IMAGE_REPOSITORY}:latest\`"
             echo
             echo "Docker Hub: ${DOCKERHUB_URL}"
           } > release-notes.md
 
           gh release create "${RELEASE_TAG}" \
+            --latest=false \
             --verify-tag \
             --title "Release ${RELEASE_TAG}" \
             --notes-file release-notes.md
 
-      - name: Check Docker Hub tag
-        if: steps.existing.outputs.tag_exists != 'true'
+      - name: Record latest release
         env:
-          IMAGE: ${{ steps.tags.outputs.image }}
-        run: |
-          set -euo pipefail
-
-          inspect_output="$(docker manifest inspect "${IMAGE}" 2>&1)" && inspect_status=0 || inspect_status=$?
-
-          if [ "${inspect_status}" -eq 0 ]; then
-            echo "Docker image tag already exists: ${IMAGE}" >&2
-            exit 1
-          fi
-
-          if printf '%s' "${inspect_output}" | grep -Eq 'no such manifest|manifest unknown'; then
-            echo "Docker image tag is available: ${IMAGE}"
-          else
-            echo "Could not inspect Docker Hub tag: ${IMAGE}" >&2
-            printf '%s\n' "${inspect_output}" >&2
-            exit "${inspect_status}"
-          fi
-
-      - name: Build and push Extended Image
-        if: steps.existing.outputs.tag_exists != 'true'
-        env:
-          IMAGE: ${{ steps.tags.outputs.image }}
-          N8N_VERSION: ${{ steps.tags.outputs.n8n_version }}
-        run: |
-          set -euo pipefail
-
-          docker build \
-            --build-arg N8N_VERSION="${N8N_VERSION}" \
-            --platform linux/amd64 \
-            -t "${IMAGE}" \
-            -t "${IMAGE_REPOSITORY}:latest" \
-            .
-
-          docker push "${IMAGE}"
-          docker push "${IMAGE_REPOSITORY}:latest"
-
-      - name: Create annotated git tag
-        if: steps.existing.outputs.tag_exists != 'true'
-        env:
+          IMAGE_TAG: ${{ steps.tags.outputs.image_tag }}
           RELEASE_TAG: ${{ steps.tags.outputs.release_tag }}
+        run: bash .github/scripts/authorize-docker-latest.sh record
+
+  promote-latest:
+    needs: release
+    concurrency:
+      group: docker-latest
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Read latest release
+        id: latest-state
+        run: bash .github/scripts/authorize-docker-latest.sh read
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Login to Docker Hub
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
+          printf '%s' "${DOCKERHUB_TOKEN}" \
+            | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "${RELEASE_TAG}" -m "Extended Image Release ${RELEASE_TAG}" "${GITHUB_SHA}"
-          git push origin "refs/tags/${RELEASE_TAG}"
+      - name: Publish latest tag
+        env:
+          IMAGE_TAG: ${{ steps.latest-state.outputs.image_tag }}
+        run: |
+          docker buildx imagetools create \
+            --prefer-index=false \
+            --tag "${IMAGE_REPOSITORY}:latest" \
+            "${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 
-      - name: Create GitHub Release
-        if: steps.existing.outputs.tag_exists != 'true'
+      - name: Mark GitHub Release as latest
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.tags.outputs.release_tag }}
-          IMAGE: ${{ steps.tags.outputs.image }}
-        run: |
-          set -euo pipefail
-
-          {
-            echo "## Docker Image"
-            echo
-            echo "この GitHub Release に対応する Extended Image です。"
-            echo
-            echo "- Extended Image: \`${IMAGE}\`"
-            echo "- Latest Image: \`${IMAGE_REPOSITORY}:latest\`"
-            echo
-            echo "Docker Hub: ${DOCKERHUB_URL}"
-          } > release-notes.md
-
-          gh release create "${RELEASE_TAG}" \
-            --verify-tag \
-            --title "Release ${RELEASE_TAG}" \
-            --notes-file release-notes.md
+          RELEASE_TAG: ${{ steps.latest-state.outputs.release_tag }}
+        run: gh release edit "${RELEASE_TAG}" --latest
