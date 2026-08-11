@@ -40,6 +40,7 @@ jobs:
             revision
             Dockerfile
             scripts/resolve-n8n-extended-tags.sh
+            .github/scripts/*.sh
             .github/workflows/release-n8n-extended.yml
           )
 

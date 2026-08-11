@@ -9,6 +9,7 @@ on:
       - revision
       - Dockerfile
       - scripts/resolve-n8n-extended-tags.sh
+      - .github/scripts/*.sh
       - .github/workflows/release-n8n-extended.yml
   workflow_dispatch:
 
@@ -24,6 +25,9 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.tags.outputs.image }}
+      release_tag: ${{ steps.tags.outputs.release_tag }}
     steps:
       - name: Require main
         run: |
@@ -38,12 +42,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-
-      - name: Acquire release lock
-        id: release-queue
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/acquire-docker-release-lock.sh
 
       - name: Resolve release tags
         id: tags
@@ -169,26 +167,10 @@ jobs:
           TAG: ${{ steps.tags.outputs.image_tag }}
         run: bash .github/scripts/manage-docker-image-owner.sh release "$TAG"
 
-      - name: Authorize latest publication
-        id: latest-state
-        run: bash .github/scripts/authorize-docker-latest.sh check
-
-      - name: Publish latest tag
-        if: steps.latest-state.outputs.publish_latest == 'true'
-        env:
-          IMAGE: ${{ steps.tags.outputs.image }}
-        run: |
-          set -euo pipefail
-
-          docker pull "${IMAGE}"
-          docker tag "${IMAGE}" "${IMAGE_REPOSITORY}:latest"
-          docker push "${IMAGE_REPOSITORY}:latest"
-
-      - name: Create missing release for existing tag
-        if: steps.existing.outputs.tag_exists == 'true' && steps.existing.outputs.release_exists != 'true'
+      - name: Create GitHub Release
+        if: steps.existing.outputs.release_exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          PUBLISH_LATEST: ${{ steps.latest-state.outputs.publish_latest }}
           RELEASE_TAG: ${{ steps.tags.outputs.release_tag }}
           IMAGE: ${{ steps.tags.outputs.image }}
         run: |
@@ -202,67 +184,62 @@ jobs:
             echo "この GitHub Release に対応する Extended Image です。"
             echo
             echo "- Extended Image: \`${IMAGE}\`"
-            if [ "${PUBLISH_LATEST}" = "true" ]; then
-              echo "- Latest Image: \`${IMAGE_REPOSITORY}:latest\`"
-            fi
             echo
             echo "Docker Hub: ${DOCKERHUB_URL}"
           } > release-notes.md
 
-          latest_option="--latest=false"
-          if [ "${PUBLISH_LATEST}" = "true" ]; then
-            latest_option="--latest"
-          fi
-
           gh release create "${RELEASE_TAG}" \
-            "${latest_option}" \
+            --latest=false \
             --verify-tag \
             --title "Release ${RELEASE_TAG}" \
             --notes-file release-notes.md
 
-      - name: Create GitHub Release
-        if: steps.existing.outputs.tag_exists != 'true'
+  promote-latest:
+    needs: release
+    concurrency:
+      group: docker-latest
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Authorize latest publication
+        id: latest-state
+        run: bash .github/scripts/authorize-docker-latest.sh check
+
+      - name: Set up Docker Buildx
+        if: steps.latest-state.outputs.publish_latest == 'true'
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Login to Docker Hub
+        if: steps.latest-state.outputs.publish_latest == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
-          PUBLISH_LATEST: ${{ steps.latest-state.outputs.publish_latest }}
-          RELEASE_TAG: ${{ steps.tags.outputs.release_tag }}
-          IMAGE: ${{ steps.tags.outputs.image }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
+          printf '%s' "${DOCKERHUB_TOKEN}" \
+            | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
 
-          {
-            echo "## Docker Image"
-            echo
-            echo "この GitHub Release に対応する Extended Image です。"
-            echo
-            echo "- Extended Image: \`${IMAGE}\`"
-            if [ "${PUBLISH_LATEST}" = "true" ]; then
-              echo "- Latest Image: \`${IMAGE_REPOSITORY}:latest\`"
-            fi
-            echo
-            echo "Docker Hub: ${DOCKERHUB_URL}"
-          } > release-notes.md
+      - name: Publish latest tag
+        if: steps.latest-state.outputs.publish_latest == 'true'
+        env:
+          IMAGE: ${{ needs.release.outputs.image }}
+        run: |
+          docker buildx imagetools create \
+            --prefer-index=false \
+            --tag "${IMAGE_REPOSITORY}:latest" \
+            "${IMAGE}"
 
-          latest_option="--latest=false"
-          if [ "${PUBLISH_LATEST}" = "true" ]; then
-            latest_option="--latest"
-          fi
-
-          gh release create "${RELEASE_TAG}" \
-            "${latest_option}" \
-            --verify-tag \
-            --title "Release ${RELEASE_TAG}" \
-            --notes-file release-notes.md
+      - name: Mark GitHub Release as latest
+        if: steps.latest-state.outputs.publish_latest == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.release.outputs.release_tag }}
+        run: gh release edit "${RELEASE_TAG}" --latest
 
       - name: Record latest publication
         if: steps.latest-state.outputs.publish_latest == 'true'
         run: bash .github/scripts/authorize-docker-latest.sh record
-
-      - name: Release lock
-        if: always() && steps.release-queue.outputs.lock_commit != ''
-        env:
-          LOCK_COMMIT: ${{ steps.release-queue.outputs.lock_commit }}
-        run: |
-          git push \
-            --force-with-lease="refs/heads/automation/docker-release-lock:$LOCK_COMMIT" \
-            origin ":refs/heads/automation/docker-release-lock"
