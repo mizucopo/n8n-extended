@@ -22,7 +22,7 @@ env:
   DOCKERHUB_URL: https://hub.docker.com/r/mizucopo/n8n-extended
 
 jobs:
-  release-lock:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Require main
@@ -40,20 +40,6 @@ jobs:
           fetch-depth: 0
 
       - name: Acquire release lock
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/acquire-docker-release-lock.sh
-
-  release:
-    needs: release-lock
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Acquire or reuse release lock
         id: release-queue
         env:
           GH_TOKEN: ${{ github.token }}
@@ -185,7 +171,7 @@ jobs:
 
       - name: Authorize latest publication
         id: latest-state
-        run: bash .github/scripts/authorize-docker-latest.sh
+        run: bash .github/scripts/authorize-docker-latest.sh check
 
       - name: Publish latest tag
         if: steps.latest-state.outputs.publish_latest == 'true'
@@ -267,6 +253,10 @@ jobs:
             --verify-tag \
             --title "Release ${RELEASE_TAG}" \
             --notes-file release-notes.md
+
+      - name: Record latest publication
+        if: steps.latest-state.outputs.publish_latest == 'true'
+        run: bash .github/scripts/authorize-docker-latest.sh record
 
       - name: Release lock
         if: always() && steps.release-queue.outputs.lock_commit != ''
