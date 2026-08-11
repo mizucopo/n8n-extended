@@ -117,6 +117,8 @@ printf "2.34.4\n" > version
 : > revision
 ```
 
+`Dockerfile` 先頭の `ARG N8N_VERSION=...` も、`version` と同じn8nバージョンへ更新します。
+
 同じ n8n バージョンに対して拡張イメージだけを修正して再公開する場合は、`revision` に `r1`、`r2` のような Extended Image Revision を書きます。
 
 ```bash
@@ -125,7 +127,7 @@ printf "r1\n" > revision
 
 この場合、公式イメージ `n8nio/n8n:2.34.4` を親にして、Docker イメージ、Git タグ、GitHub Release には `2.34.4-r1` を使用します。
 
-`main` ブランチで `version`、`revision`、`Dockerfile`、タグ解決スクリプト、またはリリースワークフローが更新されると、GitHub Actions が次の処理を行います。
+`main` ブランチで `version`、`revision`、`Dockerfile`、タグ解決スクリプト、リリースhelper、またはリリースワークフローが更新されると、GitHub Actions が次の処理を行います。
 
 1. Git タグと不変 Docker タグが未使用であることを確認
 2. Docker イメージをビルド
