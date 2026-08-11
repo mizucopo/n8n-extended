@@ -179,7 +179,9 @@ jobs:
             echo "この GitHub Release に対応する Extended Image です。"
             echo
             echo "- Extended Image: \`${IMAGE}\`"
-            echo "- Latest Image: \`${IMAGE_REPOSITORY}:latest\`"
+            if [ "${PUBLISH_LATEST}" = "true" ]; then
+              echo "- Latest Image: \`${IMAGE_REPOSITORY}:latest\`"
+            fi
             echo
             echo "Docker Hub: ${DOCKERHUB_URL}"
           } > release-notes.md
@@ -272,7 +274,9 @@ jobs:
             echo "この GitHub Release に対応する Extended Image です。"
             echo
             echo "- Extended Image: \`${IMAGE}\`"
-            echo "- Latest Image: \`${IMAGE_REPOSITORY}:latest\`"
+            if [ "${PUBLISH_LATEST}" = "true" ]; then
+              echo "- Latest Image: \`${IMAGE_REPOSITORY}:latest\`"
+            fi
             echo
             echo "Docker Hub: ${DOCKERHUB_URL}"
           } > release-notes.md
