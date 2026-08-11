@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.tags.outputs.image_tag }}
+      concurrency_key: ${{ steps.concurrency-key.outputs.key }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -35,10 +36,18 @@ jobs:
         id: tags
         run: scripts/resolve-n8n-extended-tags.sh
 
+      - name: Derive concurrency key
+        id: concurrency-key
+        env:
+          IMAGE_TAG: ${{ steps.tags.outputs.image_tag }}
+        run: |
+          key="$(printf '%s' "$IMAGE_TAG" | sha256sum | cut -d ' ' -f 1)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
   release:
     needs: resolve-tags
     concurrency:
-      group: n8n-release-${{ needs.resolve-tags.outputs.image_tag }}
+      group: n8n-release-${{ needs.resolve-tags.outputs.concurrency_key }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
