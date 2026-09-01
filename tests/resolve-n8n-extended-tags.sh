@@ -22,7 +22,7 @@ case "$alpine_image_version" in
     exit 1
     ;;
 esac
-if ! grep -Fqx 'FROM alpine:${ALPINE_IMAGE_VERSION} AS tools' "$repo_root/Dockerfile"; then
+if ! grep -Fqx "FROM alpine:\${ALPINE_IMAGE_VERSION} AS tools" "$repo_root/Dockerfile"; then
   echo "Dockerfile tools stage must use ALPINE_IMAGE_VERSION." >&2
   exit 1
 fi

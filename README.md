@@ -125,7 +125,7 @@ printf "2.36.9\n" > version
 printf "r1\n" > revision
 ```
 
-この場合、公式イメージ `n8nio/n8n:2.36.9` を親にして、Docker イメージ、Git タグ、GitHub Release には `2.34.4-r1` を使用します。
+この場合、公式イメージ `n8nio/n8n:2.36.9` を親にして、Docker イメージ、Git タグ、GitHub Release には `2.36.9-r1` を使用します。
 
 `main` ブランチで `version`、`revision`、`Dockerfile`、タグ解決スクリプト、リリースhelper、またはリリースワークフローが更新されると、GitHub Actions が次の処理を行います。
 
