@@ -1,9 +1,10 @@
-ARG N8N_VERSION=2.34.4
-ARG ALPINE_VERSION=3.24
+ARG N8N_VERSION=2.36.9
+ARG ALPINE_IMAGE_VERSION=3.24.1
+ARG ALPINE_REPOSITORY_VERSION=3.24
 ARG DOCKER_VERSION=29.2.1
 
 # Stage 1: Download Docker CLI
-FROM alpine:${ALPINE_VERSION} AS tools
+FROM alpine:${ALPINE_IMAGE_VERSION} AS tools
 ARG DOCKER_VERSION
 RUN apk add --no-cache curl apk-tools-static && \
     curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz -o docker.tgz && \
@@ -14,7 +15,7 @@ RUN apk add --no-cache curl apk-tools-static && \
 FROM n8nio/n8n:${N8N_VERSION}
 USER root
 WORKDIR /root
-ARG ALPINE_VERSION
+ARG ALPINE_REPOSITORY_VERSION
 
 # Copy Docker CLI
 COPY --from=tools docker/docker /usr/local/bin/docker
@@ -23,7 +24,7 @@ COPY --from=tools docker/docker /usr/local/bin/docker
 COPY --from=tools /sbin/apk.static /sbin/apk
 RUN chmod +x /usr/local/bin/docker && \
     chmod +x /sbin/apk && \
-    echo "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION}/main" > /etc/apk/repositories && \
-    echo "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION}/community" >> /etc/apk/repositories && \
+    echo "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_REPOSITORY_VERSION}/main" > /etc/apk/repositories && \
+    echo "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_REPOSITORY_VERSION}/community" >> /etc/apk/repositories && \
     /sbin/apk add --no-cache ffmpeg && \
     rm -rf /var/cache/apk/*

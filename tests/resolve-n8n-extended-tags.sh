@@ -13,6 +13,20 @@ if ! grep -Fqx "ARG N8N_VERSION=$version_tag" "$repo_root/Dockerfile"; then
   exit 1
 fi
 
+alpine_image_version="$(sed -n 's/^ARG ALPINE_IMAGE_VERSION=//p' "$repo_root/Dockerfile")"
+alpine_repository_version="$(sed -n 's/^ARG ALPINE_REPOSITORY_VERSION=//p' "$repo_root/Dockerfile")"
+case "$alpine_image_version" in
+  "$alpine_repository_version".*) ;;
+  *)
+    echo "Dockerfile Alpine image patch must match its repository branch." >&2
+    exit 1
+    ;;
+esac
+if ! grep -Fqx 'FROM alpine:${ALPINE_IMAGE_VERSION} AS tools' "$repo_root/Dockerfile"; then
+  echo "Dockerfile tools stage must use ALPINE_IMAGE_VERSION." >&2
+  exit 1
+fi
+
 run_case() {
   version_value="$1"
   revision_value="$2"
