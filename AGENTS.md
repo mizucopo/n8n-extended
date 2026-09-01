@@ -5,6 +5,7 @@
 - Never make changes directly on `main`.
 - Before starting work, create a GitHub Issue that describes the work.
 - Perform the work on a non-`main` branch associated with that Issue.
+- Automated base image update PRs created by the `prefect-flows` workflow are exempt from the Issue requirement and use the fixed `automation/n8n-stable-update` branch.
 
 ## Documentation
 

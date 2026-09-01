@@ -43,3 +43,7 @@ _Avoid_: release tag, initial tag
 **External Task Runner Image**:
 The official `n8nio/runners` image that matches the Upstream n8n Version and does not use an Extended Image Revision.
 _Avoid_: Extended Image, runner revision
+
+**Alpine Base Image Version**:
+The exact stable patch version used by the independent Alpine tools-stage base image.
+_Avoid_: Alpine repository version, latest
