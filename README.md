@@ -43,12 +43,14 @@ n8n 2.0 以降で Python の Code ノードを使用する場合は、External T
 `.env` に使用するバージョンと共有トークンを設定します。
 
 ```dotenv
-N8N_VERSION=2.36.9
-N8N_EXTENDED_IMAGE_TAG=2.36.9
+N8N_VERSION=x.y.z
+N8N_EXTENDED_IMAGE_TAG=x.y.z
 N8N_RUNNERS_AUTH_TOKEN=replace-with-a-random-secret
 ```
 
-`N8N_EXTENDED_IMAGE_TAG` には利用する拡張イメージのタグを指定します。`N8N_VERSION` は公式 n8n と Task Runner のバージョンなので revision を付けません。
+`x.y.z` はプレースホルダーです。利用する拡張イメージの元となる実際の n8n バージョンに置き換え、Task Runner のバージョンと揃えてください。
+
+`N8N_EXTENDED_IMAGE_TAG` には利用する拡張イメージのタグを指定します。revision 付きのタグ（例: `x.y.z-r1`）を使用しても、`N8N_VERSION` には revision を付けません。
 
 同じディレクトリに `compose.yml` を作成します。
 
@@ -110,10 +112,10 @@ docker build \
 
 ## リリース
 
-通常のリリースでは、`version` に使用する n8n バージョンを書き、`revision` は空にします。
+通常のリリースでは、`version` に使用する n8n バージョンを書き、`revision` は空にします。以下の `x.y.z` は実際の n8n バージョンに置き換えてください。
 
 ```bash
-printf "2.36.9\n" > version
+printf "x.y.z\n" > version
 : > revision
 ```
 
@@ -125,7 +127,7 @@ printf "2.36.9\n" > version
 printf "r1\n" > revision
 ```
 
-この場合、公式イメージ `n8nio/n8n:2.36.9` を親にして、Docker イメージ、Git タグ、GitHub Release には `2.36.9-r1` を使用します。
+この場合、公式イメージ `n8nio/n8n:x.y.z` を親にして、Docker イメージ、Git タグ、GitHub Release には `x.y.z-r1` を使用します。
 
 `main` ブランチで `version`、`revision`、`Dockerfile`、タグ解決スクリプト、リリースhelper、またはリリースワークフローが更新されると、GitHub Actions が次の処理を行います。
 
