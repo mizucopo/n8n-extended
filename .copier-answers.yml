@@ -6,19 +6,15 @@ docker_image_name: n8n-extended
 docker_registry: mizucopo
 project_description: n8nにDocker CLIとffmpegを追加した拡張Dockerイメージ
 project_name: n8n-extended
-project_version: 2.34.4
 use_aws_ecr: false
 use_chrome_extension: false
 use_dependabot_docker: false
 use_dependabot_github_actions: true
 use_docker: true
 use_gh_actions_docker_quality: false
-use_gh_actions_docker_release: false
-use_gh_actions_pr_tag_check: false
-use_gh_actions_release: false
 use_mit_license: true
 use_python: false
 use_rust: false
 use_tauri: false
-use_version_management: true
+use_version_management: false
 repo_template_tauri_branding_assets_created: false
