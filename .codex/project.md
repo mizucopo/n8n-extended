@@ -2,7 +2,8 @@
 
 ## Issue and branch
 
-- 作業内容を記した GitHub Issue を着手前に用意し、その Issue に対応するブランチで実装する。
+- 作業内容を記した GitHub Issue を着手前に用意する。
+- 文書や設定を含むすべての変更は `main` ではなく、その Issue に対応するブランチで行う。
 - `prefect-flows` が作成するベースイメージ自動更新 PR は Issue を要せず、固定ブランチ `automation/n8n-stable-update` を使う。
 
 ## Documentation

@@ -18,4 +18,4 @@ Issue とレビュー後の追加課題は GitHub Issues で管理します。
 - ブロック関係は GitHub の Issue 依存関係で示す。使えなければ本文に書く。
 - PR は実装とレビューに使う。課題の追跡には Issue を使う。
 
-スキルの「ticket」は GitHub Issue と読み替えます。利用可能な GitHub 連携を優先し、なければ `gh --repo` を使います。
+スキルの「ticket」は GitHub Issue と読み替えます。利用可能な GitHub 連携を優先し、なければ `gh issue create --repo HOST/OWNER/REPO` や `gh issue view ISSUE_NUMBER --repo HOST/OWNER/REPO` を使います。
