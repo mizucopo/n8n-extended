@@ -4,6 +4,7 @@
 
 Before starting work, read these files relative to the repository root:
 
+- [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and release-classification policy.
 - `.codex/project.md`
 
 Within the platform's instruction hierarchy, repository guidance takes precedence in this order: project > language > root common.
