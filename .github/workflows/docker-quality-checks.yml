@@ -19,6 +19,9 @@ jobs:
       - name: Test release tag resolver
         run: bash tests/resolve-n8n-extended-tags.sh
 
+      - name: Test PR release validation
+        run: python3 tests/check-n8n-extended-release.py
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 

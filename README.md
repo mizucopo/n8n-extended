@@ -136,7 +136,7 @@ printf "r1\n" > revision
 3. `mizucopo/n8n-extended:<version>[-<revision>]` と `mizucopo/n8n-extended:latest` を公開
 4. 同じ `<version>[-<revision>]` で Git タグと GitHub Release を作成
 
-Pull Request では、リリース対象ファイルが変更された場合だけ Git タグと Docker Hub タグの重複を検査します。既存の不変タグは上書きしません。
+Pull Request では、open かつ未マージの PR にリリース対象ファイルの変更がある場合だけ Git タグと Docker Hub タグの重複を検査します。タイトル・本文のみの編集は再検証せず、base branch の変更は再検証します。実行待ち中に closed または merged になった PR も checkout 前にスキップします。検証するコードと比較にはイベントの head/base SHA を使い、再実行でも最新の head に置き換えません。比較 commit の取得や merge base の確認に失敗した場合は、変更なしとして扱わずエラーにします。既存の不変タグは上書きしません。
 
 リポジトリの GitHub Actions Secret には、Docker Hub のアクセストークンを `DOCKERHUB_TOKEN` として登録してください。
 

@@ -19,21 +19,73 @@ env:
 
 jobs:
   check:
+    if: github.event.pull_request.state == 'open' && github.event.pull_request.merged == false && (github.event.action != 'edited' || github.event.changes.base != null)
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check current PR state
+        id: pr_state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # GET a pull request accepts the existing contents: read permission.
+          if ! pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"; then
+            echo "Could not inspect current PR state; refusing to skip release validation." >&2
+            exit 1
+          fi
+
+          state="$(jq -er '.state | select(. == "open" or . == "closed")' <<< "${pr_json}")"
+          merged="$(jq -er 'if .merged == true then "true" elif .merged == false then "false" else error("Missing PR merged state") end' <<< "${pr_json}")"
+
+          if [ "${state}" != "open" ] || [ "${merged}" = "true" ]; then
+            echo "PR is closed or merged; skipping checkout and release validation."
+            echo "validate=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "validate=true" >> "${GITHUB_OUTPUT}"
+          fi
+
       - name: Checkout
+        if: steps.pr_state.outputs.validate == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Detect release-triggering changes
+        if: steps.pr_state.outputs.validate == 'true'
         id: release_changes
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
+
+          for commit_sha in "${BASE_SHA}" "${HEAD_SHA}"; do
+            if ! git cat-file -e "${commit_sha}^{commit}" 2>/dev/null; then
+              if ! git fetch --no-tags origin "${commit_sha}"; then
+                echo "Could not fetch PR comparison commit: ${commit_sha}" >&2
+                exit 1
+              fi
+            fi
+
+            if ! git cat-file -e "${commit_sha}^{commit}" 2>/dev/null; then
+              echo "PR comparison commit is unavailable: ${commit_sha}" >&2
+              exit 1
+            fi
+          done
+
+          if [ "$(git rev-parse HEAD)" != "${HEAD_SHA}" ]; then
+            echo "Checkout does not match the event PR head: ${HEAD_SHA}" >&2
+            exit 1
+          fi
+
+          if ! git merge-base "${BASE_SHA}" "${HEAD_SHA}" >/dev/null; then
+            echo "No merge base for PR comparison: ${BASE_SHA}...${HEAD_SHA}" >&2
+            exit 1
+          fi
 
           release_inputs=(
             version
@@ -50,6 +102,7 @@ jobs:
             diff_status=$?
 
             if [ "${diff_status}" -ne 1 ]; then
+              echo "Could not compare PR release inputs (git diff exit ${diff_status})." >&2
               exit "${diff_status}"
             fi
 
@@ -59,7 +112,7 @@ jobs:
           echo "release_changes=${release_changes}" >> "${GITHUB_OUTPUT}"
 
       - name: Report no release changes
-        if: steps.release_changes.outputs.release_changes != 'true'
+        if: steps.pr_state.outputs.validate == 'true' && steps.release_changes.outputs.release_changes == 'false'
         run: echo "No release-triggering files changed; skipping duplicate tag checks."
 
       - name: Resolve release tags
