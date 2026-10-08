@@ -112,33 +112,32 @@ docker build \
 
 ## リリース
 
-通常のリリースでは、`version` に使用する n8n バージョンを書き、`revision` は空にします。以下の `x.y.z` は実際の n8n バージョンに置き換えてください。
+公開は repo-template の [Docker Project Release workflow](.github/workflows/docker-project-release.yml) を使います。PR 全体を [CONTRIBUTING.md](CONTRIBUTING.md) に従って分類し、公開する PR に `release:patch`、`release:minor`、`release:major` のいずれか一つを付けて `main` へ squash merge します。ファイルの変更だけでは公開せず、最新のマージ済み PR にラベルがなければ採番・公開をスキップします。
+
+新しい上流 n8n に更新するときは、`version` に使用する stable n8n バージョンを書き、`revision` を空にします。以下の `x.y.z` は実際の n8n バージョンに置き換えてください。
 
 ```bash
 printf "x.y.z\n" > version
 : > revision
 ```
 
-`Dockerfile` 先頭の `ARG N8N_VERSION=...` も、`version` と同じn8nバージョンへ更新します。
+`Dockerfile` 先頭の `ARG N8N_VERSION=...` も、`version` と同じ n8n バージョンへ更新します。
 
-同じ n8n バージョンに対して拡張イメージだけを修正して再公開する場合は、`revision` に `r1`、`r2` のような Extended Image Revision を書きます。
+採番は [.github/release.json](.github/release.json) の `upstream-revision` scheme に従います。ラベルの分類で上流 n8n version を通常の SemVer patch/minor/major として進めません。同じ上流 version の修正では `version` と `revision` を手動で増やさず、Actions が次の `rN` を採番します。新しい上流の初回タグは `x.y.z`（`-r0` なし）、再公開は `x.y.z-r1` 以降です。既存の Git タグ・GitHub Release・Docker Hub タグと衝突すれば、未使用の revision まで進めます。既存 `2.42.4` は再使用しません。
+
+公式イメージと Task Runner は revision なしの上流 version を使い、Docker イメージ・Git タグ・GitHub Release 名は同じ `<version>[-rN]` になります。採番commitとタグを先に確定してから、n8n固有の [project hook](.github/scripts/docker-image-project.sh) で build・smoke・公開を行います。Docker品質CIはread-onlyで公開secretを使いません。
+
+途中失敗の復旧は**元の workflow run の再実行**を使います。新しい `workflow_dispatch` は過去の公開を復旧しません。同じ採番commitが所有する公開済みimageを確認して不足分だけ再開し、完了後もimage所有権markerを残します。古いrunの再実行で Docker `latest` と GitHub latest Release を巻き戻しません。詳細は [共通公開・復旧手順](docs/release.md) と [project hookの契約](docs/docker-project-pipeline.md) を参照してください。
+
+公開前に `release:patch/minor/major` ラベルと Docker Hub のアクセストークン `DOCKERHUB_TOKEN` を用意します。標準 `GITHUB_TOKEN` に採番commit・タグの直接pushを許す既存設定が必要です。上流更新の自動PRにも、公開する場合はメンテナーが分類ラベルを付けます。
+
+移行時は旧 `Release n8n Extended Image` run が実行中でないことを確認してください。旧workflow・helperは削除し、新しい方式では旧公開runを復旧しません。移行PRはreleaseラベルなしで取り込み、製品公開は別のラベル付きPRで行います。
+
+ローカルの品質確認は次のコマンドです（Docker Buildx、ShellCheck、Python 3.14、jqが必要）。
 
 ```bash
-printf "r1\n" > revision
+IMAGE_REPOSITORY=mizucopo/n8n-extended python3 .github/scripts/docker-image-pipeline.py quality
 ```
-
-この場合、公式イメージ `n8nio/n8n:x.y.z` を親にして、Docker イメージ、Git タグ、GitHub Release には `x.y.z-r1` を使用します。
-
-`main` ブランチで `version`、`revision`、`Dockerfile`、タグ解決スクリプト、リリースhelper、またはリリースワークフローが更新されると、GitHub Actions が次の処理を行います。
-
-1. Git タグと不変 Docker タグが未使用であることを確認
-2. Docker イメージをビルド
-3. `mizucopo/n8n-extended:<version>[-<revision>]` と `mizucopo/n8n-extended:latest` を公開
-4. 同じ `<version>[-<revision>]` で Git タグと GitHub Release を作成
-
-Pull Request では、open かつ未マージの PR にリリース対象ファイルの変更がある場合だけ Git タグと Docker Hub タグの重複を検査します。タイトル・本文のみの編集は再検証せず、base branch の変更は再検証します。実行待ち中に closed または merged になった PR も checkout 前にスキップします。検証するコードと比較にはイベントの head/base SHA を使い、再実行でも最新の head に置き換えません。比較 commit の取得や merge base の確認に失敗した場合は、変更なしとして扱わずエラーにします。既存の不変タグは上書きしません。
-
-リポジトリの GitHub Actions Secret には、Docker Hub のアクセストークンを `DOCKERHUB_TOKEN` として登録してください。
 
 設計判断の詳細は [Extended Image tags](docs/adr/0001-extended-image-tags.md) と [Extended Image release automation](docs/adr/0002-extended-image-release-automation.md) を参照してください。
 

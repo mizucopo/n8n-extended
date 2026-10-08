@@ -1,0 +1,413 @@
+#!/usr/bin/env python3
+"""Shared Docker Hub release protocol for project-owned image hooks."""
+
+import importlib.util
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from urllib import error, parse, request
+
+HOOK = Path(".github/scripts/docker-image-project.sh")
+OWNER = Path(".github/scripts/manage-docker-image-owner.sh")
+TAG_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}\Z")
+NAME_PATTERN = re.compile(r"[a-z][a-z0-9_-]*\Z")
+REPOSITORY_PATTERN = re.compile(r"[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*\Z")
+DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}\Z")
+
+
+class PipelineError(Exception):
+    """A state cannot be confirmed or a release contract is violated."""
+
+
+def command(
+    *args: str, capture: bool = False, env: dict[str, str] | None = None
+) -> str:
+    result = subprocess.run(
+        args,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE if capture else None,
+        env=env,
+    )
+    if result.returncode != 0:
+        raise PipelineError(f"Command failed ({result.returncode}): {args[0]}")
+    return result.stdout if capture else ""
+
+
+def required_env(name: str) -> str:
+    value = os.environ.get(name, "")
+    if not value:
+        raise PipelineError(f"{name} is required")
+    return value
+
+
+def project_env() -> dict[str, str]:
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"GH_TOKEN", "DOCKERHUB_TOKEN"}
+    }
+
+
+def output(name: str, value: str) -> None:
+    if "\n" in value or "\r" in value:
+        raise PipelineError(f"Invalid output value for {name}")
+    with Path(required_env("GITHUB_OUTPUT")).open("a") as stream:
+        stream.write(f"{name}={value}\n")
+
+
+def repository() -> str:
+    value = required_env("IMAGE_REPOSITORY")
+    if not REPOSITORY_PATTERN.fullmatch(value):
+        raise PipelineError(
+            "IMAGE_REPOSITORY must be a Docker Hub namespace/repository"
+        )
+    return value
+
+
+def validate_tag(tag: object, label: str) -> str:
+    if not isinstance(tag, str) or not TAG_PATTERN.fullmatch(tag) or tag == "latest":
+        raise PipelineError(f"{label} is not an immutable Docker tag")
+    return tag
+
+
+def resolve_plan() -> dict:
+    plan = declared_plan()
+    return validate_plan(plan)
+
+
+def declared_plan() -> dict:
+    """Read numbered publication data, or the current PR declaration for quality checks."""
+    frozen = os.environ.get("RELEASE_PLAN_OUTPUT")
+    if frozen:
+        publication = json.loads(Path(frozen).read_text())["publication"]
+    else:
+        module_path = Path(__file__).with_name("release.py")
+        spec = importlib.util.spec_from_file_location("preparation", module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        control = Path(".")
+        policy = json.loads((control / ".github/release.json").read_text())
+        git = module.Git()
+        tree = git.text("rev-parse", "HEAD")
+        version = module.read_version(git, tree, policy)
+        revision_path = policy["version"].get("revision_path")
+        revision = (
+            (git.blob(tree, revision_path, True) or b"r0").decode().strip()
+            if revision_path
+            else None
+        )
+        publication = module.publication(policy, version, revision)
+    repositories = {image["repository"] for image in publication["images"]}
+    if repositories != {repository()}:
+        raise PipelineError("Image destination differs from the fixed declaration")
+    return {
+        "release_tag": publication["release_tag"],
+        "images": [
+            {"name": image["name"], "tag": image["tag"]}
+            for image in publication["images"]
+        ],
+        "latest_image": publication["latest_image"],
+        "release_paths": publication["release_paths"],
+    }
+
+
+def validate_plan(plan: dict) -> dict:
+    plan = json.loads(json.dumps(plan))
+    repo = repository()
+    if not isinstance(plan, dict) or set(plan) != {
+        "release_tag",
+        "images",
+        "latest_image",
+        "release_paths",
+    }:
+        raise PipelineError("Project plan must contain exactly the documented fields")
+    release_tag = validate_tag(plan["release_tag"], "release_tag")
+    command("git", "check-ref-format", f"refs/tags/{release_tag}")
+    images = plan["images"]
+    if not isinstance(images, list) or not 1 <= len(images) <= 16:
+        raise PipelineError("images must contain 1 to 16 ordered entries")
+    names: set[str] = set()
+    tags: set[str] = set()
+    for image in images:
+        if not isinstance(image, dict) or set(image) != {"name", "tag"}:
+            raise PipelineError("Each image must contain name and tag")
+        name = image["name"]
+        tag = validate_tag(image["tag"], "image tag")
+        marker_ref = f"refs/heads/automation/docker-images/{tag}"
+        marker_check = subprocess.run(
+            ["git", "check-ref-format", marker_ref],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if marker_check.returncode != 0:
+            raise PipelineError(
+                f"Image tag cannot be used as an ownership marker: {tag}"
+            )
+        if not isinstance(name, str) or not NAME_PATTERN.fullmatch(name):
+            raise PipelineError("Image name must be lowercase letters, digits, _ or -")
+        if name in names or tag in tags:
+            raise PipelineError("Image names and tags must be unique")
+        names.add(name)
+        tags.add(tag)
+    latest = plan["latest_image"]
+    if latest is not None and (not isinstance(latest, str) or latest not in names):
+        raise PipelineError("latest_image must name a listed image or be null")
+    paths = plan["release_paths"]
+    if not isinstance(paths, list) or not paths:
+        raise PipelineError("release_paths must be a nonempty array")
+    for path in paths:
+        if (
+            not isinstance(path, str)
+            or not path
+            or "\n" in path
+            or "\r" in path
+            or path.startswith("/")
+            or "\\" in path
+            or ".." in Path(path).parts
+        ):
+            raise PipelineError(
+                "release_paths must contain repository-relative Git paths"
+            )
+    plan["image_repository"] = repo
+    return plan
+
+
+def hook(action: str, plan: dict, *args: str, capture: bool = False) -> str:
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "docker-release-plan.json"
+        path.write_text(json.dumps(plan) + "\n")
+        env = {**project_env(), "DOCKER_RELEASE_PLAN": str(path)}
+        return command("bash", str(HOOK), action, *args, capture=capture, env=env)
+
+
+def api_json(
+    url: str, token: str | None = None, payload: dict | None = None
+) -> tuple[int, object]:
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = None
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload).encode()
+    req = request.Request(url, data=data, headers=headers)
+    try:
+        with request.urlopen(req, timeout=30) as response:
+            status = response.status
+            body = response.read()
+    except error.HTTPError as exc:
+        try:
+            status = exc.code
+            body = exc.read()
+        finally:
+            exc.close()
+    except error.URLError as exc:
+        raise PipelineError(
+            f"Could not inspect remote state at {url}: {exc.reason}"
+        ) from exc
+    if status == 404:
+        return status, None
+    if status != 200:
+        raise PipelineError(f"Remote state lookup failed at {url}: HTTP {status}")
+    try:
+        return status, json.loads(body)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise PipelineError(
+            f"Remote state lookup returned invalid JSON at {url}"
+        ) from exc
+
+
+def github_release_exists(tag: str) -> bool:
+    api = required_env("GITHUB_API_URL")
+    repo = required_env("GITHUB_REPOSITORY")
+    token = required_env("GH_TOKEN")
+    url = f"{api}/repos/{repo}/releases/tags/{parse.quote(tag, safe='')}"
+    status, _ = api_json(url, token)
+    return status == 200
+
+
+def hub_token() -> str:
+    url = "https://hub.docker.com/v2/auth/token"
+    status, response = api_json(
+        url,
+        payload={
+            "identifier": required_env("DOCKERHUB_USERNAME"),
+            "secret": required_env("DOCKERHUB_TOKEN"),
+        },
+    )
+    if status != 200 or not isinstance(response, dict):
+        raise PipelineError("Could not authenticate with Docker Hub")
+    token = response.get("access_token")
+    if not isinstance(token, str) or not token:
+        raise PipelineError("Docker Hub did not return an access token")
+    return token
+
+
+def docker_login() -> None:
+    result = subprocess.run(
+        [
+            "docker",
+            "login",
+            "--username",
+            required_env("DOCKERHUB_USERNAME"),
+            "--password-stdin",
+        ],
+        input=required_env("DOCKERHUB_TOKEN"),
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise PipelineError("Could not log in to Docker Hub")
+
+
+def image_exists(plan: dict, tag: str, token: str | None = None) -> bool:
+    namespace, image_repo = plan["image_repository"].split("/", 1)
+    url = (
+        f"https://hub.docker.com/v2/repositories/{namespace}/{image_repo}/tags/"
+        f"{parse.quote(tag, safe='')}"
+    )
+    status, response = api_json(url, token)
+    if status == 404:
+        return False
+    if not isinstance(response, dict):
+        raise PipelineError(f"Docker Hub returned invalid state for {tag}")
+    if token is not None:
+        digest = response.get("digest")
+        if digest is not None:
+            if not isinstance(digest, str) or not DIGEST_PATTERN.fullmatch(digest):
+                raise PipelineError(f"Docker Hub returned an invalid digest for {tag}")
+        else:
+            images = response.get("images")
+            if (
+                not isinstance(images, list)
+                or not images
+                or any(
+                    not isinstance(image, dict)
+                    or not isinstance(image.get("digest"), str)
+                    or not DIGEST_PATTERN.fullmatch(image["digest"])
+                    for image in images
+                )
+            ):
+                raise PipelineError(
+                    f"Docker Hub returned no verifiable digest for {tag}"
+                )
+    return True
+
+
+def local_tag_commit(tag: str) -> str | None:
+    command("git", "fetch", "--force", "--tags")
+    result = subprocess.run(
+        ["git", "show-ref", "--tags", "--verify", "--quiet", f"refs/tags/{tag}"],
+        check=False,
+    )
+    if result.returncode == 1:
+        return None
+    if result.returncode != 0:
+        raise PipelineError(f"Could not inspect Git tag {tag}")
+    return command(
+        "git", "rev-list", "-n", "1", f"refs/tags/{tag}", capture=True
+    ).strip()
+
+
+def report(lines: list[str]) -> None:
+    message = "\n".join(lines) + "\n"
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with Path(summary).open("a") as stream:
+            stream.write(message)
+    print(message)
+
+
+def release(plan: dict) -> None:
+    if required_env("GITHUB_REF") != "refs/heads/main":
+        raise PipelineError("Docker project releases must run from main")
+    tag = plan["release_tag"]
+    commit = required_env("RELEASE_SHA")
+    tag_commit = local_tag_commit(tag)
+    if tag_commit != commit:
+        raise PipelineError(f"Git tag {tag} points to {tag_commit}, not {commit}")
+    release_exists = github_release_exists(tag)
+    if release_exists and tag_commit is None:
+        raise PipelineError("GitHub Release exists without the matching Git tag")
+    token = hub_token()
+    states = {
+        image["name"]: image_exists(plan, image["tag"], token)
+        for image in plan["images"]
+    }
+    if release_exists and not all(states.values()):
+        raise PipelineError(
+            "Published release is missing images; refusing to change it"
+        )
+    for image in plan["images"]:
+        if states[image["name"]]:
+            command("bash", str(OWNER), "verify", image["tag"])
+    if not all(states.values()):
+        docker_login()
+    for image in plan["images"]:
+        if states[image["name"]]:
+            continue
+        image_tag = image["tag"]
+        image_ref = f"{plan['image_repository']}:{image_tag}"
+        command("bash", str(OWNER), "record", image_tag)
+        hook("publish", plan, image["name"], image_ref)
+        if not image_exists(plan, image_tag, hub_token()):
+            raise PipelineError(f"Image was not published: {image_ref}")
+    if not release_exists:
+        notes = hook("notes", plan, capture=True)
+        if not notes.strip():
+            raise PipelineError("Project release notes must not be empty")
+        with tempfile.TemporaryDirectory() as directory:
+            notes_file = Path(directory) / "release-notes.md"
+            notes_file.write_text(notes)
+            command(
+                "gh",
+                "release",
+                "create",
+                tag,
+                "--latest=false",
+                "--verify-tag",
+                "--title",
+                tag,
+                "--notes-file",
+                str(notes_file),
+            )
+    latest = plan["latest_image"]
+    if latest is None:
+        output("promote_latest", "false")
+    else:
+        output("promote_latest", "true")
+
+
+def main() -> None:
+    if len(sys.argv) != 2 or sys.argv[1] not in {"quality", "release"}:
+        raise PipelineError("Usage: docker-image-pipeline.py {quality|release}")
+    action = sys.argv[1]
+    if action == "release":
+        if not os.environ.get("RELEASE_PLAN_OUTPUT"):
+            raise PipelineError("Numbered publication data is missing")
+        module_path = Path(__file__).with_name("release.py")
+        spec = importlib.util.spec_from_file_location("numbering", module_path)
+        numbering = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(numbering)
+        recorded = numbering.checkout_plan(numbering.Git())
+        if json.loads(Path(os.environ["RELEASE_PLAN_OUTPUT"]).read_text()) != recorded:
+            raise PipelineError("Publication data differs from the numbered commit")
+    plan = resolve_plan()
+    if action == "quality":
+        hook("quality", plan)
+    else:
+        release(plan)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except PipelineError as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        raise SystemExit(1) from exc

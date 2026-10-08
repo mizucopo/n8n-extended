@@ -14,3 +14,11 @@
 ## File operations
 
 - ファイルの移動には `git mv`、削除には `git rm` を使う。
+
+## CI compatibility
+
+- `prefect-flows` の上流更新Flowは `check` と `docker-quality-checks` を待つ。共通分類・Docker品質workflowのjob IDはこの名前を維持する。処理本体はrepo-templateの共通実装を使う。
+
+## Temporary template exceptions
+
+- Docker project helperはpush後の確認直前にHub tokenを再取得する（[repo-template#172](https://github.com/mizucopo/repo-template/issues/172)）。n8nサンプルは削除した旧タグ検査testを呼ばない（[repo-template#173](https://github.com/mizucopo/repo-template/issues/173)）。共通修正が供給されたらCopier適用・検証で例外を解消する。
