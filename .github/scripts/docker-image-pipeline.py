@@ -356,7 +356,7 @@ def release(plan: dict) -> None:
         image_ref = f"{plan['image_repository']}:{image_tag}"
         command("bash", str(OWNER), "record", image_tag)
         hook("publish", plan, image["name"], image_ref)
-        if not image_exists(plan, image_tag, token):
+        if not image_exists(plan, image_tag, hub_token()):
             raise PipelineError(f"Image was not published: {image_ref}")
     if not release_exists:
         notes = hook("notes", plan, capture=True)
