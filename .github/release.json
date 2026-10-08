@@ -1,0 +1,36 @@
+{
+  "version": {
+    "scheme": "upstream-revision",
+    "revision_path": "revision",
+    "sources": [
+      {
+        "path": "version",
+        "format": "text"
+      }
+    ],
+    "locks": [
+    ]
+  },
+  "publication": {
+    "release_tag": "{version}{revision_suffix}",
+    "github_release": true,
+
+    "release_paths": [
+      "version",
+      "revision",
+      "Dockerfile",
+      ".github/release.json",
+      ".github/scripts/docker-image-project.sh"
+    ],
+    "latest_image": "extended",
+    "images": [
+      {
+        "name": "extended",
+        "repository": "mizucopo/n8n-extended",
+        "tag": "{version}{revision_suffix}",
+        "aliases": ["latest"],
+        "registry": "dockerhub"
+      }
+    ]
+  }
+}

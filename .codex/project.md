@@ -14,3 +14,7 @@
 ## File operations
 
 - ファイルの移動には `git mv`、削除には `git rm` を使う。
+
+## CI compatibility
+
+- `prefect-flows` の上流更新Flowは `check` と `docker-quality-checks` を待つ。共通分類・Docker品質workflowのjob IDはこの名前を維持する。処理本体はrepo-templateの共通実装を使う。
