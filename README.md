@@ -131,8 +131,6 @@ printf "x.y.z\n" > version
 
 公開前に `release:patch/minor/major` ラベルと Docker Hub のアクセストークン `DOCKERHUB_TOKEN` を用意します。標準 `GITHUB_TOKEN` に採番commit・タグの直接pushを許す既存設定が必要です。上流更新の自動PRにも、公開する場合はメンテナーが分類ラベルを付けます。
 
-移行時は旧 `Release n8n Extended Image` run が実行中でないことを確認してください。旧workflow・helperは削除し、新しい方式では旧公開runを復旧しません。移行PRはreleaseラベルなしで取り込み、製品公開は別のラベル付きPRで行います。
-
 ローカルの品質確認は次のコマンドです（Docker Buildx、ShellCheck、Python 3.14、jqが必要）。
 
 ```bash

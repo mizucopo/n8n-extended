@@ -93,6 +93,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/docker-image-pipeline.py release
 
+      - name: Add release downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.publish.outputs.release_id }}
+
+          DOCKERHUB_USERNAME: "mizucopo"
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: python3 -I .github/scripts/release.py distribution
+
   promote-latest:
     needs: [prepare, release]
     if: needs.release.outputs.promote_latest == 'true'
