@@ -126,7 +126,14 @@ def validate_plan(plan: dict) -> dict:
         "release_paths",
     }:
         raise PipelineError("Project plan must contain exactly the documented fields")
-    release_tag = validate_tag(plan["release_tag"], "release_tag")
+    release_tag = plan["release_tag"]
+    if (
+        not isinstance(release_tag, str)
+        or not release_tag
+        or release_tag.startswith("-")
+        or release_tag == "latest"
+    ):
+        raise PipelineError("release_tag is not an immutable Git tag")
     command("git", "check-ref-format", f"refs/tags/{release_tag}")
     images = plan["images"]
     if not isinstance(images, list) or not 1 <= len(images) <= 16:
@@ -324,7 +331,7 @@ def report(lines: list[str]) -> None:
     print(message)
 
 
-def release(plan: dict) -> None:
+def release(plan: dict, *, is_prerelease: bool) -> None:
     if required_env("GITHUB_REF") != "refs/heads/main":
         raise PipelineError("Docker project releases must run from main")
     tag = plan["release_tag"]
@@ -356,7 +363,8 @@ def release(plan: dict) -> None:
         image_ref = f"{plan['image_repository']}:{image_tag}"
         command("bash", str(OWNER), "record", image_tag)
         hook("publish", plan, image["name"], image_ref)
-        if not image_exists(plan, image_tag, hub_token()):
+        token = hub_token()
+        if not image_exists(plan, image_tag, token):
             raise PipelineError(f"Image was not published: {image_ref}")
     if not release_exists:
         notes = hook("notes", plan, capture=True)
@@ -366,19 +374,11 @@ def release(plan: dict) -> None:
             notes_file = Path(directory) / "release-notes.md"
             notes_file.write_text(notes)
             command(
-                "gh",
-                "release",
-                "create",
-                tag,
-                "--latest=false",
-                "--verify-tag",
-                "--title",
-                tag,
-                "--notes-file",
-                str(notes_file),
+                "python3", "-I", ".github/scripts/release.py", "create",
+                env={**os.environ, "RELEASE_NOTES_PATH": str(notes_file)},
             )
     latest = plan["latest_image"]
-    if latest is None:
+    if latest is None or is_prerelease:
         output("promote_latest", "false")
     else:
         output("promote_latest", "true")
@@ -402,7 +402,7 @@ def main() -> None:
     if action == "quality":
         hook("quality", plan)
     else:
-        release(plan)
+        release(plan, is_prerelease=recorded["publication"]["is_prerelease"])
 
 
 if __name__ == "__main__":
