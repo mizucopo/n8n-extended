@@ -129,7 +129,9 @@ printf "x.y.z\n" > version
 
 n8n 固有の処理は `Dockerfile` とこの hook（`quality`・`publish`・`notes`）に集約し、採番・公開管理・復旧・latest 昇格は共通パイプラインが担います。
 
-途中失敗の復旧は**元の workflow run の再実行**を使います。新しい `workflow_dispatch` は過去の公開を復旧しません。同じ採番commitが所有する公開済みimageを確認して不足分だけ再開し、完了後もimage所有権markerを残します。古いrunの再実行で Docker `latest` と GitHub latest Release を巻き戻しません。詳細は [共通公開・復旧手順](docs/release.md) と [project hookの契約](docs/docker-project-pipeline.md) を参照してください。
+途中失敗の復旧は**元の workflow run の再実行**を使います。新しい `workflow_dispatch` は過去の公開を復旧しません。同じ採番 commit が所有する公開済み image を検証し、不足工程だけを再開します。公開が未完了・部分失敗の間は image 所有記録 ref を保持し、既存 image を無条件に再公開しません。
+
+公開と必要な Latest 昇格の成功後は、検証済みの証拠を Release 本文に保存・確認し、所有記録 ref を削除します。削除後の再実行では、証拠と公開計画・採番 SHA・現在の全 image の参照先・digest が一致した場合だけ記録を再生成し、証拠の欠落・不一致や照会失敗では停止します。古い run の再実行で Docker `latest` と GitHub latest Release を巻き戻しません。詳細は [共通公開・復旧手順](docs/release.md) を参照してください。
 
 公開前に `release:patch/minor/major` ラベルと Docker Hub のアクセストークン `DOCKERHUB_TOKEN` を用意します。標準 `GITHUB_TOKEN` に採番commit・タグの直接pushを許す既存設定が必要です。上流更新の自動PRにも、公開する場合はメンテナーが分類ラベルを付けます。
 
