@@ -125,7 +125,9 @@ printf "x.y.z\n" > version
 
 採番は [.github/release.json](.github/release.json) の `upstream-revision` scheme に従います。ラベルの分類で上流 n8n version を通常の SemVer patch/minor/major として進めません。同じ上流 version の修正では `version` と `revision` を手動で増やさず、Actions が次の `rN` を採番します。新しい上流の初回タグは `x.y.z`（`-r0` なし）、再公開は `x.y.z-r1` 以降です。既存の Git タグ・GitHub Release・Docker Hub タグと衝突すれば、未使用の revision まで進めます。既存 `2.42.4` は再使用しません。
 
-公式イメージと Task Runner は revision なしの上流 version を使い、Docker イメージ・Git タグ・GitHub Release 名は同じ `<version>[-rN]` になります。採番commitとタグを先に確定してから、n8n固有の [project hook](.github/scripts/docker-image-project.sh) で build・smoke・公開を行います。Docker品質CIはread-onlyで公開secretを使いません。
+公式イメージと Task Runner は revision なしの上流 version を使い、Docker イメージ・Git タグ・GitHub Release 名は同じ `<version>[-rN]` になります。採番commitとタグを先に確定してから、[project hook](.github/scripts/docker-image-project.sh) で build・smoke・公開・Release 本文の生成を行います。Docker品質CIはread-onlyで公開secretを使いません。
+
+n8n 固有の処理は `Dockerfile` とこの hook（`quality`・`publish`・`notes`）に集約し、採番・公開管理・復旧・latest 昇格は共通パイプラインが担います。
 
 途中失敗の復旧は**元の workflow run の再実行**を使います。新しい `workflow_dispatch` は過去の公開を復旧しません。同じ採番commitが所有する公開済みimageを確認して不足分だけ再開し、完了後もimage所有権markerを残します。古いrunの再実行で Docker `latest` と GitHub latest Release を巻き戻しません。詳細は [共通公開・復旧手順](docs/release.md) と [project hookの契約](docs/docker-project-pipeline.md) を参照してください。
 
@@ -136,8 +138,6 @@ printf "x.y.z\n" > version
 ```bash
 IMAGE_REPOSITORY=mizucopo/n8n-extended python3 .github/scripts/docker-image-pipeline.py quality
 ```
-
-設計判断の詳細は [Extended Image tags](docs/adr/0001-extended-image-tags.md) と [Extended Image release automation](docs/adr/0002-extended-image-release-automation.md) を参照してください。
 
 ## ライセンス
 
