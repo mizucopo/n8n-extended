@@ -149,3 +149,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.latest-state.outputs.release_tag }}
         run: gh release edit "$TAG" --latest
+
+  cleanup-image-owners:
+    needs: [prepare, release, promote-latest]
+    if: ${{ !cancelled() && needs.prepare.outputs.publish == 'true' && needs.release.result == 'success' && (needs.promote-latest.result == 'success' || needs.promote-latest.result == 'skipped') }}
+    permissions:
+      contents: write
+      actions: read
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_SHA: ${{ needs.prepare.outputs.release_sha }}
+      DOCKERHUB_USERNAME: "mizucopo"
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - name: Checkout numbering commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.release_sha }}
+          fetch-depth: 0
+
+      - name: Verify numbering commit and read publication data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          export RELEASE_PLAN_OUTPUT="$RUNNER_TEMP/release-plan.json"
+          printf 'RELEASE_PLAN_OUTPUT=%s\n' "$RELEASE_PLAN_OUTPUT" >> "$GITHUB_ENV"
+          python3 -I .github/scripts/release.py plan
+
+      - name: Retain image digests and remove completed ownership markers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I .github/scripts/release.py image-owner-complete
