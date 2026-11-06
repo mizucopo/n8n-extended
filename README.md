@@ -112,7 +112,7 @@ docker build \
 
 ## リリース
 
-公開は repo-template の [Docker Project Release workflow](.github/workflows/docker-project-release.yml) を使います。PR 全体を [CONTRIBUTING.md](CONTRIBUTING.md) に従って分類し、公開する PR に `release:patch`、`release:minor`、`release:major` のいずれか一つを付けて `main` へ squash merge します。ファイルの変更だけでは公開せず、最新のマージ済み PR にラベルがなければ採番・公開をスキップします。
+公開は repo-template の [Docker Project Release workflow](.github/workflows/docker-project-release.yml) を使います。[CONTRIBUTING.md](CONTRIBUTING.md) の upstream-revision 方針に従い、新しい PR を `main` へ squash merge すると、分類ラベルなしで現在の main 全体が採番・公開の対象になります。上流更新、Dockerfile や設定の変更、文書のみ・テストのみの変更も同じ扱いです。`publication.release_paths` の差分でも公開を抑止しません。待機中の複数 PR が一度の公開にまとまる場合があります。
 
 新しい上流 n8n に更新するときは、`version` に使用する stable n8n バージョンを書き、`revision` を空にします。以下の `x.y.z` は実際の n8n バージョンに置き換えてください。
 
@@ -133,7 +133,7 @@ n8n 固有の処理は `Dockerfile` とこの hook（`quality`・`publish`・`no
 
 公開と必要な Latest 昇格の成功後は、検証済みの証拠を Release 本文に保存・確認し、所有記録 ref を削除します。削除後の再実行では、証拠と公開計画・採番 SHA・現在の全 image の参照先・digest が一致した場合だけ記録を再生成し、証拠の欠落・不一致や照会失敗では停止します。古い run の再実行で Docker `latest` と GitHub latest Release を巻き戻しません。詳細は [共通公開・復旧手順](docs/release.md) を参照してください。
 
-公開前に `release:patch/minor/major` ラベルと Docker Hub のアクセストークン `DOCKERHUB_TOKEN` を用意します。標準 `GITHUB_TOKEN` に採番commit・タグの直接pushを許す既存設定が必要です。上流更新の自動PRにも、公開する場合はメンテナーが分類ラベルを付けます。
+公開には Docker Hub のアクセストークン `DOCKERHUB_TOKEN` と、標準 `GITHUB_TOKEN` に採番commit・タグの直接pushを許す既存設定が必要です。上流更新の自動PRにも分類ラベルや分類理由は不要です。新しいマージ済み PR がなければ新しい番号は作らず、採番済みの同一runは元のcommit/tagを再利用します。
 
 ローカルの品質確認は次のコマンドです（Docker Buildx、ShellCheck、Python 3.14、jqが必要）。
 
