@@ -27,7 +27,7 @@ docker run --rm -it \
   --platform linux/amd64 \
   -p 5678:5678 \
   -e NODES_EXCLUDE='[]' \
-  -v n8n_data:/home/node/.n8n \
+  -v n8n_data:/root/.n8n \
   -v /var/run/docker.sock:/var/run/docker.sock \
   mizucopo/n8n-extended:latest
 ```
@@ -35,6 +35,12 @@ docker run --rm -it \
 起動後、<http://localhost:5678> を開いてください。
 
 `NODES_EXCLUDE='[]'` は、n8n 2.0 以降で既定無効となった Execute Command ノードを有効にするための設定です。Docker CLI や ffmpeg は Execute Command ノードから利用できます。
+
+## データの永続化
+
+この拡張イメージは `root` ユーザー（`HOME=/root`）で実行します。`N8N_USER_FOLDER` を変更していない場合、n8n の設定・暗号化キー・SQLite データベースは `/root/.n8n` に保存されます。上記コマンドと下記 Compose の例は、このディレクトリを `n8n_data` ボリュームに保存します。ボリュームを削除しなければ、コンテナを再作成してもデータを引き継げます。
+
+以前の例の `/home/node/.n8n` へのマウントだけでは、このイメージの既定の保存先を永続化できません。既存環境では、コンテナを削除・再作成する前に実際の保存先とバックアップを確認してください。マウント先の変更だけでは既存データは移動しません。コンテナ内だけに残っているデータや暗号化キーを失わないよう、移行・復元を確認してから切り替えてください。`N8N_USER_FOLDER` などを変更している環境は、その設定に応じた保存先を使用してください。
 
 ## Python コードを実行する
 
@@ -69,7 +75,7 @@ services:
       N8N_NATIVE_PYTHON_RUNNER: "true"
       NODES_EXCLUDE: "[]"
     volumes:
-      - n8n_data:/home/node/.n8n
+      - n8n_data:/root/.n8n
       - /var/run/docker.sock:/var/run/docker.sock
 
   task-runners:

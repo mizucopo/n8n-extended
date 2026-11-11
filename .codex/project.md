@@ -1,10 +1,9 @@
 # n8n Extended Image project guidance
 
-## Issue and branch
+## Branch
 
-- 作業内容を記した GitHub Issue を着手前に用意する。
-- 文書や設定を含むすべての変更は `main` ではなく、その Issue に対応するブランチで行う。
-- `prefect-flows` が作成するベースイメージ自動更新 PR は Issue を要せず、固定ブランチ `automation/n8n-stable-update` を使う。
+- 文書や設定を含むすべての変更は `main` ではなく、作業用ブランチで行う。
+- `prefect-flows` が作成するベースイメージ自動更新 PR は固定ブランチ `automation/n8n-stable-update` を使う。
 
 ## Documentation
 
