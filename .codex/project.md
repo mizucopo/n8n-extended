@@ -3,7 +3,7 @@
 ## Branch
 
 - 文書や設定を含むすべての変更は `main` ではなく、作業用ブランチで行う。
-- `prefect-flows` が作成するベースイメージ自動更新 PR は固定ブランチ `automation/n8n-stable-update` を使う。
+- ベースイメージの自動更新 PR には、固定ブランチ `automation/n8n-stable-update` を使う。
 
 ## Documentation
 
@@ -16,4 +16,4 @@
 
 ## CI compatibility
 
-- `prefect-flows` の上流更新Flowは `check` と `docker-quality-checks` を待つ。共通分類・Docker品質workflowのjob IDはこの名前を維持する。処理本体はrepo-templateの共通実装を使う。
+- ベースイメージの自動更新 PR の必須チェックとして、リリース分類のジョブ ID `check` と Docker 品質チェックのジョブ ID `docker-quality-checks` を維持する。両チェックのワークフローには `repo-template` の共通実装を使う。
