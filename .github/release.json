@@ -8,8 +8,7 @@
         "format": "text"
       }
     ],
-    "locks": [
-    ]
+    "locks": []
   },
   "publication": {
     "release_tag": "{version}{revision_suffix}",
